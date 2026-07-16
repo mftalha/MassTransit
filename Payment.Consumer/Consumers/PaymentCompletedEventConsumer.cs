@@ -22,6 +22,7 @@ public class PaymentCompletedEventConsumer : IConsumer<PaymentCompletedEvent>
         // 2. Müşteriye E-posta gönder
         // 3. Stok güncellemesi yap
 
-        await Task.CompletedTask;
+        // burada ack dönüşü yapıyor CompletedTask a girdiği gibi o aman kuyruktan siliniyor veri
+        await Task.CompletedTask; 
     }
 }

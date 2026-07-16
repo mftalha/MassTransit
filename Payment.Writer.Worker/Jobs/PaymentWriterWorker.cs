@@ -83,7 +83,7 @@ public class PaymentWriterWorker : BackgroundService
                 {
                     await publishEndpoint.Publish(new PaymentCompletedEvent(item.Event.PaymentId, item.Event.Amount), stoppingToken);
                 }
-
+                // [OutboxMessage], [OutboxState] ve [Payments] tablolarına eklendiği satır 
                 // 3. İŞLEMİ COMMIT ET
                 await dbContext.SaveChangesAsync(stoppingToken);
 
