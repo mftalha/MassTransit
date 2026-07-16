@@ -1,4 +1,4 @@
-namespace Payment.Consumer.Worker
+namespace Payment.Writer.Worker
 {
     public class Worker : BackgroundService
     {
