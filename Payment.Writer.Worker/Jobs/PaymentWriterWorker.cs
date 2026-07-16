@@ -17,7 +17,7 @@ public class PaymentWriterWorker : BackgroundService
     // Kubernetes'te her Pod'un kendi hostname'i olur, bu da eşsiz bir Consumer Name demektir.
     private readonly string _consumerName = Environment.GetEnvironmentVariable("HOSTNAME") ?? Guid.NewGuid().ToString();
     private const string StreamName = "payment-stream";
-    private const string ConsumerGroupName = "payment-writers-group";
+    private const string ConsumerGroupName = "payment-writers-group";  // birden fazla worker varsa aynı gruba dahil edebiliriz, böylece yük paylaşımı olur.
 
     public PaymentWriterWorker(IConnectionMultiplexer redis, IServiceProvider serviceProvider, ILogger<PaymentWriterWorker> logger)
     {

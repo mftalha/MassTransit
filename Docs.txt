@@ -1,0 +1,64 @@
+﻿[Müşteri/Postman] 
+       │ (HTTP POST /api/payment - Instant 202 Accepted)
+       ▼
+ ┌───────────┐
+ │Payment.API│ ──► [Redis Stream (Buffer)]
+ └───────────┘
+                     │ (Batch - 500'erli gruplar halinde okuma)
+                     ▼
+       ┌─────────────────────┐
+       │Payment.Writer.Worker│
+       └─────────────────────┘
+                     │ (Tek bir Transaction içinde yazar)
+                     ├───► SQL Server [Payments Tablosu]
+                     └───► SQL Server [OutboxMessage Tablosu]
+                                 │
+                                 │ (MassTransit Outbox Publisher)
+                                 ▼
+                           [RabbitMQ Broker]
+                                 │
+                                 ▼ (payment-completed-queue)
+                       ┌───────────────────────┐
+                       │Payment.Consumer.Worker│
+                       └───────────────────────┘
+                                 │ (Fatura, E-posta, Stok vb. süreçler)
+                                 ▼
+
+
+2. Projeler ve Sorumlulukları
+A. Payment.API (Stateless)
+Görevi: Müşteriden gelen ödeme isteklerini karşılamak.
+
+Çalışma Mantığı: Veritabanına doğrudan yazıp müşteriyi bekletmek yerine, isteği alır almaz benzersiz bir PaymentId (Guid) üretir, bunu yüksek hızlı bir tampon bellek olan Redis Stream'e fırlatır ve anında 202 Accepted döner. API'nin işlem süresi <5 milisaniyedir.
+
+B. Payment.Writer.Worker (Stateless)
+Görevi: Redis'teki yükü eritip veritabanına güvenli şekilde yazmak ve kuyruğa haber vermek.
+
+Çalışma Mantığı: Redis Stream'i sürekli tarar. İçerideki verileri 500'erli paketler (Batch) halinde çeker. AppDbContext kullanarak tek bir SQL transaction'ı içinde hem kendi ana tablomuz olan Payments tablosuna veriyi yazar hem de MassTransit'in OutboxMessage tablosuna olayı (Event) kaydeder.
+
+C. Payment.Consumer.Worker (Stateless)
+Görevi: Ödeme tamamlandıktan sonra tetiklenecek yan süreçleri (fatura kesme, mail atma, stok düşme vb.) yönetmek.
+
+Çalışma Mantığı: RabbitMQ üzerindeki payment-completed-queue kuyruğunu dinler. Gelen mesajları asenkron olarak işler ve hata almadan tamamlandığında RabbitMQ'ya "başarıyla işlendi" (ACK) sinyali gönderir.
+
+3. Kullanılan Kritik Mimari Terimler ve Kavramlar
+Transactional Outbox Pattern: Veritabanına kayıt yazmak ile mesaj kuyruğuna (RabbitMQ) mesaj göndermek işlemlerinin atomik (bütünleşik) olmasını sağlar. Ağ kopması veya sistem çökmesi durumunda dahi mesajın kaybolmamasını veya mükerrer (çift) gitmemesini garanti eder.
+
+Redis Streams (As Ingestion Buffer): API'ye gelen ani trafik dalgalanmalarını (Spike) emen bir amortisördür. SQL Server doğrudan saniyede 10.000 yazma isteğini kaldıramayacağı için, Redis bu yükü göğüsler ve arkadaki Worker'ların ezilmesini önler.
+
+MassTransit Inbox/Outbox State: MassTransit'in mesajların güvenli taşınması (Outbox) ve aynı mesajın birden fazla kez işlenmesini (Inbox - Idempotency) önlemek için veritabanında otomatik yönettiği durum tablolarıdır.
+
+Fluent API - Precision Configuration: decimal tipindeki para birimi alanlarında (Amount) SQL Server'ın hassasiyet kaybı (truncation) uyarısı vermemesi için AppDbContext üzerinde yaptığımız HasPrecision(18, 2) konfigürasyonudur.
+
+4. Altyapı Bileşenleri ve Durumları
+Redis: payment-stream adında bir stream kuyruğu üzerinden anlık veri kabul ediyor.
+
+RabbitMQ: MassTransit entegrasyonu ile payment-completed-queue kuyruğu üzerinden haberleşmeyi sağlıyor.
+
+SQL Server (PaymentDb):
+
+Payments: Ödeme kayıtlarının tutulduğu ana tablo.
+
+InboxState, OutboxMessage, OutboxState: MassTransit sistem tabloları.
+
+__EFMigrationsHistory: EF Core göç takip tablosu.
