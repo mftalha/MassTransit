@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 1s
+
+scrape_configs:
+  # 1. Redis Metrikleri
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['payment-redis-exporter:9121']
+
+  # 2. RabbitMQ Metrikleri
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['payment-rabbitmq:15692']
+
+  # 3. CPU ve RAM Kaynak İzleme (cAdvisor)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['payment-cadvisor:8080']
